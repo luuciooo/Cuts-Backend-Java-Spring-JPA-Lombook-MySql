@@ -24,9 +24,6 @@ public class Turno {
 
     private LocalTime hora;
 
-    @Enumerated(EnumType.STRING)
-    private Estado estado;
-
     private String codigoUnico;
 
     @ManyToOne
@@ -37,8 +34,5 @@ public class Turno {
     @JoinColumn(name = "id_servicio")
     private Servicio servicio;
 
-    public enum Estado {
-        CONFIRMADO, CANCELADO, REPROGRAMADO
-    }
 }
 
