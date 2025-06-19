@@ -1,20 +1,31 @@
 package com.example.YamilCuts.service.impl;
 
+import com.example.YamilCuts.DTO.request.ReservaTurnoDTO;
+import com.example.YamilCuts.DTO.response.TurnoCreadoDTO;
 import com.example.YamilCuts.DTO.response.TurnosDisponiblesDTO;
+import com.example.YamilCuts.exception.TurnoNoEncontradoException;
 import com.example.YamilCuts.model.Feriado;
+import com.example.YamilCuts.model.Servicio;
 import com.example.YamilCuts.model.Turno;
+import com.example.YamilCuts.model.Usuario;
 import com.example.YamilCuts.repository.FeriadoRepository;
+import com.example.YamilCuts.repository.ServicioRepository;
 import com.example.YamilCuts.repository.TurnoRepository;
+import com.example.YamilCuts.repository.UsuarioRepository;
 import com.example.YamilCuts.service.TurnoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import com.example.YamilCuts.exception.TurnoNoDisponibleException;
 
+import java.security.SecureRandom;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -22,6 +33,8 @@ public class TurnoServiceImpl implements TurnoService {
 
     private final TurnoRepository turnoRepository;
     private final FeriadoRepository feriadoRepository;
+    private final ServicioRepository servicioRepository;
+    private final UsuarioRepository usuarioRepository;
 
     @Override
     public List<TurnosDisponiblesDTO> obtenerTurnosPorFecha(LocalDate fechaInicio) {
@@ -83,6 +96,66 @@ public class TurnoServiceImpl implements TurnoService {
 
         return disponibles;
     }
+
+    @Override
+    public TurnoCreadoDTO reservarTurno(ReservaTurnoDTO dto) {
+        boolean ocupado = turnoRepository.existsByFechaAndHora(dto.getFecha(), dto.getHora());
+        if (ocupado) {
+            throw new TurnoNoDisponibleException("El horario ya está ocupado");
+        }
+
+        Servicio servicio = servicioRepository.findById(dto.getIdServicio())
+                .orElseThrow(() -> new RuntimeException("Servicio no encontrado"));
+
+        Usuario cliente = Usuario.builder()
+                .nombre(dto.getNombre())
+                .whatsapp(dto.getWhatsapp())
+                .rol(Usuario.Rol.CLIENTE)
+                .build();
+        usuarioRepository.save(cliente);
+
+        String codigo = generarCodigoUnico();
+
+        Turno turno = Turno.builder()
+                .fecha(dto.getFecha())
+                .hora(dto.getHora())
+                .usuario(cliente)
+                .servicio(servicio)
+                .codigoUnico(codigo)
+                .build();
+        turnoRepository.save(turno);
+
+        //notificador.enviarConfirmacion(cliente.getWhatsapp(), codigo); // Implementalo si querés
+
+        return TurnoCreadoDTO.builder()
+                .fecha(dto.getFecha())
+                .hora(dto.getHora())
+                .nombre(dto.getNombre())
+                .whatsapp(dto.getWhatsapp())
+                .build();
+    }
+
+    public String generarCodigoUnico() {
+        Random random = new SecureRandom();
+
+        int numero = random.nextInt(900) + 100; // 100–999
+        String letras = random.ints(3, 'A', 'Z' + 1)
+                .mapToObj(i -> String.valueOf((char) i))
+                .collect(Collectors.joining());
+
+        return numero + letras;
+    }
+
+    @Override
+    public void cancelarTurno(String codigo) {
+        Turno turno = turnoRepository.findByCodigoUnico(codigo)
+                .orElseThrow(() -> new TurnoNoEncontradoException("Turno no encontrado"));
+
+        turnoRepository.delete(turno);
+
+        //notificador.notificarCancelacionAlAdmin(turno); // ⚠️ Implementar esta parte en WhatsAppNotificador
+    }
+
 
 
 }
